@@ -1,3 +1,6 @@
+require('dotenv').config();
+
+
 const { Client, GatewayIntentBits } = require('discord.js');
 const fs = require('fs');
 const client = new Client({
@@ -11,7 +14,7 @@ const client = new Client({
 });
 
 // Конфигурация
-const TOKEN = '[DISCORD_BOT_TOKEN]'; // Твой токен
+const TOKEN = process.env.DISCORD_TOKEN;
 const TEACHERS_FILE = 'teachers.json';
 const INVITE_FILE = 'trackedInvites.json';
 
@@ -179,7 +182,7 @@ client.on('messageCreate', async message => {
                             { id: client.user.id, allow: ['ViewChannel', 'SendMessages'] }
                         ],
                     });
-                    await channel.send(`Здравей, ${member}! Това е нашият приватен чат с ${teacherMember.user.username}.`);
+                    await channel.send(`Здравей, ${member}! Това е нашият личен чат с ${teacherMember.user.username}.`);
                     createdChannels++;
                 }
             }
@@ -239,7 +242,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
                     { id: client.user.id, allow: ['ViewChannel', 'SendMessages'] }
                 ],
             });
-            channel.send(`Здравей, ${newMember}! Това е нашият приватен чат с ${teacherMember.user.username}.`);
+            channel.send(`Здравей, ${newMember}! Това е нашият личен чат с ${teacherMember.user.username}.`);
         }
 
         if (oldMember.nickname !== newMember.nickname && hasRoleNow) {
