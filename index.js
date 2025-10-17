@@ -16,7 +16,9 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildInvites,
         GatewayIntentBits.GuildVoiceStates,
+		GatewayIntentBits.DirectMessages,
     ],
+	partials: ['CHANNEL'],
 });
 
 // Конфигурация
@@ -257,6 +259,32 @@ client.on('guildMemberAdd', async member => {
     newInvites.forEach(invite => {
         inviteUsesCache.set(`${guild.id}-${invite.code}`, invite.uses);
     });
+	
+	
+	 try {
+        // Изпраща лично съобщение
+        await member.send('👋 Добре дошъл в сървъра! Моля, напиши своето име и фамилия (напр. "Иван Иванов"):');
+
+        // Изчаква отговора (до 60 секунди)
+        const dmChannel = await member.createDM();
+        const collected = await dmChannel.awaitMessages({
+            max: 1,
+            time: 60000, // 1 минута
+            errors: ['time']
+        });
+
+        const fullName = collected.first().content.trim();
+
+        // Задава псевдонима в сървъра
+        await member.setNickname(fullName);
+        await dmChannel.send(`✅ Псевдонимът ти беше зададен на: **${fullName}**`);
+
+    } catch (error) {
+        console.error('Грешка при задаване на псевдоним:', error);
+        try {
+            await member.send('⚠️ Не успях да променя псевдонима ти. Увери се, че ботът има нужните права.');
+        } catch {}
+    }
 });
 
 // ==== Логика за частни канали при смяна на роля/никнейм ====
