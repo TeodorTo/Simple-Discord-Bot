@@ -81,7 +81,7 @@
 1. **Клонирай хранилището**
 
    ```bash
-   git clone https://github.com/<твоето_потребителско_име>/Simple-Discord-Bot.git
+   git clone https://github.com/TeodorTo/Simple-Discord-Bot.git
    cd Simple-Discord-Bot
    ```
 
@@ -183,7 +183,7 @@ Simple-Discord-Bot/
 
 ## 🧠 Автор
 
-**Име:** JupiterSoft
+**Име:** Теодор Тодоров
 **Език:** Node.js / Discord.js
 **Описание:** Проект, създаден с цел улесняване на комуникацията между учители и ученици в Discord.
 
