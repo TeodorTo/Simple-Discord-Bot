@@ -33,6 +33,9 @@ let trackedInvites = {};
 let specialChannelId = null; // ID на специалния "Join to Create VC"
 const inviteUsesCache = new Map();
 
+// Следене на нови членове за автоматично напомняне
+const newMemberTimeouts = new Map();
+
 // Зареждане на учители
 if (fs.existsSync(TEACHERS_FILE)) {
     teachers = JSON.parse(fs.readFileSync(TEACHERS_FILE)).teachers || [];
@@ -79,6 +82,15 @@ client.on('messageCreate', async message => {
 \`!add-teacher @учител Име на роля\`
 - Добавя нов учител и свързва роля за учениците.
 
+\`!update-teacher-role @учител НоваРоля\`
+- Променя ролята на учител без да го премахваш.
+
+\`!list-teachers\`
+- Показва всички добавени учители и техните роли.
+
+\`!remove-teacher @учител\` или \`!remove-teacher ИмеНаРоля\`
+- Премахва даден учител от списъка.
+
 \`!generate-invite @учител\`
 - Създава покана, която автоматично дава ролята на споменатия учител.
 
@@ -110,6 +122,69 @@ client.on('messageCreate', async message => {
         teachers.push({ id: teacherId, role: roleName });
         fs.writeFileSync(TEACHERS_FILE, JSON.stringify({ teachers }, null, 2));
         message.reply(`Добавен учител <@${teacherId}> с роля "${roleName}"`);
+    }
+
+    // ==== !update-teacher-role ====
+    if (message.content.startsWith('!update-teacher-role')) {
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild))
+            return message.reply('Нямаш права да изпълняваш тази команда!');
+
+        const args = message.content.split(' ').slice(1);
+        const teacherMention = message.mentions.users.first();
+        const newRole = args.slice(1).join(' ');
+
+        if (!teacherMention || !newRole)
+            return message.reply('Употреба: `!update-teacher-role @учител НоваРоля`');
+
+        const teacher = teachers.find(t => t.id === teacherMention.id);
+        if (!teacher)
+            return message.reply('Този учител не е намерен!');
+
+        teacher.role = newRole;
+        fs.writeFileSync(TEACHERS_FILE, JSON.stringify({ teachers }, null, 2));
+        message.reply(`✅ Ролята на <@${teacher.id}> беше променена на "${newRole}"`);
+    }
+
+    // ==== !list-teachers ====
+    if (message.content === '!list-teachers') {
+        if (teachers.length === 0) 
+            return message.reply('❌ Все още няма добавени учители.');
+
+        let teacherList = teachers
+            .map((t, i) => `**${i + 1}.** <@${t.id}> — Роля: \`${t.role}\``)
+            .join('\n');
+
+        message.reply(`📚 **Списък с учители:**\n${teacherList}`);
+    }
+
+    // ==== !remove-teacher ====
+    if (message.content.startsWith('!remove-teacher')) {
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageGuild)) 
+            return message.reply('Нямаш права да изпълняваш тази команда!');
+
+        const args = message.content.split(' ').slice(1);
+        const teacherMention = message.mentions.users.first();
+        const roleName = teacherMention ? null : args.join(' ');
+
+        if (!teacherMention && !roleName)
+            return message.reply('Употреба: `!remove-teacher @учител` или `!remove-teacher ИмеНаРоля`');
+
+        let removed;
+        if (teacherMention) {
+            const teacherId = teacherMention.id;
+            const teacherIndex = teachers.findIndex(t => t.id === teacherId);
+            if (teacherIndex === -1)
+                return message.reply('❌ Този учител не е намерен в списъка.');
+            removed = teachers.splice(teacherIndex, 1)[0];
+        } else {
+            const teacherIndex = teachers.findIndex(t => t.role.toLowerCase() === roleName.toLowerCase());
+            if (teacherIndex === -1)
+                return message.reply(`❌ Не е намерен учител с роля "${roleName}".`);
+            removed = teachers.splice(teacherIndex, 1)[0];
+        }
+
+        fs.writeFileSync(TEACHERS_FILE, JSON.stringify({ teachers }, null, 2));
+        message.reply(`✅ Учител <@${removed.id}> с роля "${removed.role}" беше премахнат.`);
     }
 
     // ==== !generate-invite ====
@@ -204,7 +279,6 @@ client.on('messageCreate', async message => {
 // ==== Логика за Join-to-Create VC ====
 client.on('voiceStateUpdate', async (oldState, newState) => {
     try {
-        // Потребител влиза в специалния канал
         if (newState.channelId === specialChannelId) {
             const guild = newState.guild;
             const member = newState.member;
@@ -219,7 +293,6 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
             await member.voice.setChannel(tempChannel);
         }
 
-        // Потребител излиза от временен канал
         if (
             oldState.channel &&
             oldState.channel.id !== specialChannelId &&
@@ -259,25 +332,35 @@ client.on('guildMemberAdd', async member => {
     newInvites.forEach(invite => {
         inviteUsesCache.set(`${guild.id}-${invite.code}`, invite.uses);
     });
-	
-	
-	 try {
-        // Изпраща лично съобщение
-        await member.send('👋 Добре дошъл в сървъра! Моля, напиши своето име и фамилия (напр. "Иван Иванов"):');
 
-        // Изчаква отговора (до 60 секунди)
+    // ==== АВТОМАТИЧНО НАПОМНЯНЕ ЗА НОВИ ЧЛЕНОВЕ ====
+    try {
+        await member.send('👋 Добре дошъл! Моля, напиши своето име и фамилия (напр. "Иван Иванов") в рамките на 10 минути:');
+
         const dmChannel = await member.createDM();
+
+        const timeout = setTimeout(async () => {
+            try {
+                await dmChannel.send('⚠️ Напомняне: Все още не си написал името си. Моля, направи го, за да можем да те добавим правилно в сървъра!');
+            } catch (err) {
+                console.error('Не мога да изпратя напомняне на нов член:', err);
+            }
+        }, 10 * 60 * 1000); // 10 минути
+
+        newMemberTimeouts.set(member.id, timeout);
+
         const collected = await dmChannel.awaitMessages({
             max: 1,
-            time: 60000, // 1 минута
+            time: 600000, // 10 минути
             errors: ['time']
         });
 
         const fullName = collected.first().content.trim();
-
-        // Задава псевдонима в сървъра
         await member.setNickname(fullName);
         await dmChannel.send(`✅ Псевдонимът ти беше зададен на: **${fullName}**`);
+
+        clearTimeout(newMemberTimeouts.get(member.id));
+        newMemberTimeouts.delete(member.id);
 
     } catch (error) {
         console.error('Грешка при задаване на псевдоним:', error);
