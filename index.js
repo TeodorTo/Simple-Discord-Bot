@@ -1,5 +1,14 @@
 require('dotenv').config();
 
+const anyDeskWindows = "https://anydesk.com/en/downloads/thank-you?dv=win_exe";
+const anyDeskMac = "https://anydesk.com/en/downloads/thank-you?dv=mac_dmg";
+const anyDeskLinux = "https://anydesk.com/en/downloads/linux";
+
+const visualStudio = "https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=Community&channel=Release&version=VS2022&source=VSLandingPage&cid=2030&passive=false";
+const visualStudioCode = "https://code.visualstudio.com/Download";
+const intelliJIdea = "https://lp.jetbrains.com/intellij-idea-promo/?source=google&medium=cpc&campaign=EMEA_en_EAST_IDEA_Branded&term=intellij%20idea&content=693349187757&gad_source=1&gad_campaignid=9736965301&gclid=CjwKCAiAwqHIBhAEEiwAx9cTeblqI2Aan8i9W6hpUpapDUljY2tpxlIBY98frPTkK-igZ1czMJjN1RoCg-oQAvD_BwE";
+const pyCharm = "https://www.jetbrains.com/pycharm/";
+
 const { 
     Client, 
     GatewayIntentBits, 
@@ -252,6 +261,49 @@ client.on('messageCreate', async message => {
         message.reply(`Създадени са ${createdChannels} нови канала.`);
     }
 
+
+// ==== !msg-role ====
+    if (message.content.startsWith('!msg-role')) {
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages))
+            return message.reply('Нямаш права да изпълняваш тази команда!');
+
+        const mentionedRole = message.mentions.roles.first();
+        const args = message.content.split(' ').slice(1);
+        const textStartIndex = args.findIndex(arg => arg.includes('<@&'));
+        const textToSend = args.slice(textStartIndex + 1).join(' ');
+
+        if (!mentionedRole || !textToSend)
+            return message.reply('Употреба: `!msg-role @Роля ТекстНаСъобщението`');
+
+        const guild = message.guild;
+        const role = mentionedRole;
+
+        await guild.members.fetch(); // за да сме сигурни, че имаме всички членове
+        const membersWithRole = guild.members.cache.filter(m => m.roles.cache.has(role.id) && !m.user.bot);
+
+        if (membersWithRole.size === 0)
+            return message.reply(`❌ Няма потребители с роля "${role.name}".`);
+
+        let sentCount = 0;
+
+        for (const member of membersWithRole.values()) {
+            const nickname = (member.nickname || member.user.username).toLowerCase();
+
+            const privateChannel = guild.channels.cache.find(c =>
+                c.name === nickname &&
+                c.permissionOverwrites.cache.has(member.id)
+            );
+
+            if (privateChannel) {
+                await privateChannel.send(`📢 <@&${role.id}> — ${textToSend}`);
+                sentCount++;
+            }
+        }
+
+        message.reply(`✅ Съобщението беше изпратено в ${sentCount} частни канала на ролята "${role.name}".`);
+    }
+
+
     // ==== !setup-vc ====
     if (message.content === '!setup-vc') {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageChannels))
@@ -336,6 +388,10 @@ client.on('guildMemberAdd', async member => {
     // ==== АВТОМАТИЧНО НАПОМНЯНЕ ЗА НОВИ ЧЛЕНОВЕ ====
     try {
         await member.send('👋 Добре дошъл! Моля, напиши своето име и фамилия (напр. "Иван Иванов") в рамките на 10 минути:');
+        await member.send('Изпращам ти линкове към програмите които ще са ти нужни за да проведем обучението без проблеми!:');
+        await member.send(`AnyDesk: Windows - ${anyDeskWindows} ,MacOS - ${anyDeskMac} , Linux - ${anyDeskLinux}`);
+        await member.send(`Според това на какъв език ще се обучавате ,моля изтеглете съответното IDE:`);
+        await member.send(`C#/C++/C - ${visualStudio}, JavaScript - ${visualStudioCode}, Java - ${intelliJIdea}, Python - ${pyCharm}` );
 
         const dmChannel = await member.createDM();
 
@@ -365,7 +421,7 @@ client.on('guildMemberAdd', async member => {
     } catch (error) {
         console.error('Грешка при задаване на псевдоним:', error);
         try {
-            await member.send('⚠️ Не успях да променя псевдонима ти. Увери се, че ботът има нужните права.');
+            await member.send('⚠️ Не успях да променя псевдонима ти.');
         } catch {}
     }
 });
